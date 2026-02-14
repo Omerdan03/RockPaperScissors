@@ -128,6 +128,39 @@ class GameHelper:
         self.complete_both_setups()
         self.click_ready()  # P1's first turn
 
+    # ── computer mode helpers ──
+
+    def open_computer(self):
+        self.driver.get(f"{self.url}/computer")
+
+    def start_computer_game(self, size="8"):
+        """Full flow: open computer page, config, setup P1, arrive at play."""
+        self.open_computer()
+        select = self.driver.find_element(By.ID, "board-size")
+        for opt in select.find_elements(By.TAG_NAME, "option"):
+            if opt.get_attribute("value") == str(size):
+                opt.click()
+                break
+        self.driver.find_element(By.ID, "start-btn").click()
+        # Should go straight to setup (no transition screen)
+        self.wait.until(EC.visibility_of_element_located((By.ID, "game-screen")))
+        self.place_setup_pieces_computer()
+
+    def place_setup_pieces_computer(self):
+        """Place flag + 2 bombs for P1 in computer mode."""
+        zone = ".cell.zone-p1.setup-target"
+
+        self._click_first_palette_item()
+        self._click_first_target(zone)
+
+        for _ in range(2):
+            self._click_first_target(zone)
+
+        done = self.wait.until(EC.element_to_be_clickable((By.ID, "done-setup-btn")))
+        done.click()
+        # Should go straight to play (no P2 setup or transition)
+        time.sleep(0.5)
+
     # ── private ──
 
     def _click_first_palette_item(self):

@@ -142,6 +142,19 @@ class Game:
                     self.grid[row][c] = Piece(pool[idx], player)
                     idx += 1
 
+    def auto_setup_player(self, player: int):
+        """Randomly place 1 flag + 2 bombs, then fill with RPS pieces."""
+        rows = self.deploy_rows(player)
+        cells = [(r, c) for r in rows for c in range(self.size)]
+        random.shuffle(cells)
+
+        for piece_type, count in [("flag", 1), ("bomb", 2)]:
+            for _ in range(count):
+                r, c = cells.pop()
+                self.grid[r][c] = Piece(piece_type, player)
+
+        self._fill_rps(player)
+
     def finish_setup(self, player: int | None = None) -> dict:
         if player is None:
             player = self.setup_player
@@ -152,7 +165,15 @@ class Game:
 
         self._fill_rps(player)
 
-        if self.mode == "online":
+        if self.mode == "computer":
+            # Computer mode: auto-setup player 2 and go straight to play
+            self.auto_setup_player(2)
+            self.phase = "play"
+            self.current_player = 1
+            self.turn_count = 0
+            self._add_log("Game started!")
+            return {"next": "play"}
+        elif self.mode == "online":
             # Mark this player as done
             if player == 1:
                 self.p1_setup_done = True

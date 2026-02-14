@@ -2,6 +2,7 @@
 
 from flask import Blueprint, jsonify, request, send_from_directory
 
+from ai import pick_ai_move
 from models import GameRoom, generate_token
 from room_manager import games, generate_room_code, prune_old_games
 
@@ -21,6 +22,11 @@ def get_room_and_player() -> tuple:
     if player is None:
         return None, None, "Invalid token"
     room.touch()
+
+    # Computer mode: human is always player 1
+    if room.mode == "computer":
+        player = 1
+        return room, player, None
 
     # Local mode: single token shared by both players.
     # Use viewer query param if present, otherwise infer from game state.
@@ -52,6 +58,11 @@ def local_page():
     return send_from_directory("static", "local.html")
 
 
+@api_bp.route("/computer")
+def computer_page():
+    return send_from_directory("static", "computer.html")
+
+
 @api_bp.route("/online")
 def online_page():
     return send_from_directory("static", "online.html")
@@ -68,7 +79,7 @@ def create_room():
     mode = data.get("mode", "local")
     if size < 4 or size > 16:
         return jsonify({"error": "Board size must be between 4 and 16"}), 400
-    if mode not in ("local", "online"):
+    if mode not in ("local", "online", "computer"):
         return jsonify({"error": "Invalid mode"}), 400
 
     game_id = generate_room_code()
@@ -204,4 +215,19 @@ def make_move():
     if "error" in result:
         return jsonify(result), 400
     room.bump_version()
+
+    # Computer mode: auto-execute AI move after human's move
+    if room.mode == "computer" and room.game.phase == "play" and room.game.current_player == 2:
+        ai_move = pick_ai_move(room.game, 2)
+        if ai_move:
+            ai_result = room.game.make_move(ai_move["fr"], ai_move["fc"], ai_move["tr"], ai_move["tc"])
+            room.bump_version()
+            result["ai_move"] = {
+                "fr": ai_move["fr"],
+                "fc": ai_move["fc"],
+                "tr": ai_move["tr"],
+                "tc": ai_move["tc"],
+                **ai_result,
+            }
+
     return jsonify(result)

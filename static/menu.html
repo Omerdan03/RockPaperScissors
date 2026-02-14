@@ -142,7 +142,8 @@
   <div class="subtitle">Stratego meets Rock-Paper-Scissors</div>
 
   <button class="btn" id="local-btn">Local Game</button>
-  <button class="btn accent2" id="host-btn">Host Game</button>
+  <button class="btn accent2" id="computer-btn">vs Computer</button>
+  <button class="btn secondary" id="host-btn">Host Game</button>
   <button class="btn secondary" id="join-toggle-btn">Join Game</button>
 
   <div class="join-section" id="join-section">
@@ -157,6 +158,10 @@
 <script>
 document.getElementById('local-btn').addEventListener('click', () => {
   window.location.href = '/local';
+});
+
+document.getElementById('computer-btn').addEventListener('click', () => {
+  window.location.href = '/computer';
 });
 
 document.getElementById('host-btn').addEventListener('click', () => {
