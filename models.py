@@ -1,14 +1,12 @@
-"""RPS Stratego - A tactical board game server combining Stratego hidden information with RPS combat."""
+"""Game models: Piece, Game, and GameRoom classes."""
 
 import random
-import json
-from flask import Flask, jsonify, request, send_from_directory
+import time
 
-app = Flask(__name__, static_folder="static")
 
-# ── Game state (single game in memory) ──────────────────────────────────────
-
-game = None
+def generate_token() -> str:
+    import string
+    return "".join(random.choices(string.ascii_letters + string.digits, k=32))
 
 
 class Piece:
@@ -31,18 +29,23 @@ class Piece:
 
 
 class Game:
-    def __init__(self, board_size: int):
+    def __init__(self, board_size: int, mode: str = "local"):
         self.size = board_size
+        self.mode = mode
         self.grid: list[list[Piece | None]] = [
             [None] * board_size for _ in range(board_size)
         ]
         self.phase = "setup"          # setup | play | over
-        self.setup_player = 1         # which player is setting up
+        self.setup_player = 1         # which player is setting up (local mode)
         self.current_player = 1
         self.turn_count = 0
         self.winner = None
         self.log: list[str] = []
         self.distribution = self._calc_distribution()
+        self.last_combat = None       # last combat result for polling
+        # Online concurrent setup tracking
+        self.p1_setup_done = False
+        self.p2_setup_done = False
 
     # ── piece distribution ──────────────────────────────────────────────────
 
@@ -65,25 +68,29 @@ class Game:
 
     # ── setup ───────────────────────────────────────────────────────────────
 
-    def setup_remaining(self) -> dict[str, int]:
-        """Count how many flag/bomb pieces the setup_player still needs to place."""
+    def setup_remaining(self, player: int | None = None) -> dict[str, int]:
+        """Count how many flag/bomb pieces the given player still needs to place."""
+        if player is None:
+            player = self.setup_player
         placed = {"flag": 0, "bomb": 0}
         for r in range(self.size):
             for c in range(self.size):
                 p = self.grid[r][c]
-                if p and p.owner == self.setup_player and p.type in placed:
+                if p and p.owner == player and p.type in placed:
                     placed[p.type] += 1
         return {
             "flag": 1 - placed["flag"],
             "bomb": 2 - placed["bomb"],
         }
 
-    def place_setup_piece(self, r: int, c: int, piece_type: str) -> dict:
+    def place_setup_piece(self, r: int, c: int, piece_type: str, player: int | None = None) -> dict:
         if self.phase != "setup":
             return {"error": "Not in setup phase"}
+        if player is None:
+            player = self.setup_player
         if piece_type not in ("flag", "bomb"):
             return {"error": "Can only manually place flag or bomb"}
-        rows = self.deploy_rows(self.setup_player)
+        rows = self.deploy_rows(player)
         if r not in rows:
             return {"error": "Must place in your deployment zone"}
         if c < 0 or c >= self.size:
@@ -91,36 +98,34 @@ class Game:
         if self.grid[r][c] is not None:
             return {"error": "Cell already occupied"}
 
-        remaining = self.setup_remaining()
+        remaining = self.setup_remaining(player)
         if remaining.get(piece_type, 0) <= 0:
             return {"error": f"No more {piece_type} pieces to place"}
 
-        self.grid[r][c] = Piece(piece_type, self.setup_player)
+        self.grid[r][c] = Piece(piece_type, player)
         return {"ok": True}
 
-    def remove_setup_piece(self, r: int, c: int) -> dict:
+    def remove_setup_piece(self, r: int, c: int, player: int | None = None) -> dict:
         """Remove a piece placed during setup (allow undo)."""
         if self.phase != "setup":
             return {"error": "Not in setup phase"}
-        rows = self.deploy_rows(self.setup_player)
+        if player is None:
+            player = self.setup_player
+        rows = self.deploy_rows(player)
         if r not in rows:
             return {"error": "Not in your deployment zone"}
         p = self.grid[r][c]
         if p is None:
             return {"error": "No piece there"}
-        if p.owner != self.setup_player:
+        if p.owner != player:
             return {"error": "Not your piece"}
         if p.type not in ("flag", "bomb"):
             return {"error": "Can only remove manually placed pieces"}
         self.grid[r][c] = None
         return {"ok": True}
 
-    def finish_setup(self) -> dict:
-        remaining = self.setup_remaining()
-        if remaining["flag"] > 0 or remaining["bomb"] > 0:
-            return {"error": "Place all flag and bomb pieces first"}
-
-        # fill remaining cells with RPS
+    def _fill_rps(self, player: int):
+        """Fill remaining deployment cells for a player with RPS pieces."""
         dist = self._calc_distribution()
         pool = (
             ["rock"] * dist["rock"]
@@ -129,23 +134,50 @@ class Game:
         )
         random.shuffle(pool)
 
-        rows = self.deploy_rows(self.setup_player)
+        rows = self.deploy_rows(player)
         idx = 0
         for row in rows:
             for c in range(self.size):
                 if self.grid[row][c] is None:
-                    self.grid[row][c] = Piece(pool[idx], self.setup_player)
+                    self.grid[row][c] = Piece(pool[idx], player)
                     idx += 1
 
-        if self.setup_player == 1:
-            self.setup_player = 2
-            return {"next": "setup", "player": 2}
+    def finish_setup(self, player: int | None = None) -> dict:
+        if player is None:
+            player = self.setup_player
+
+        remaining = self.setup_remaining(player)
+        if remaining["flag"] > 0 or remaining["bomb"] > 0:
+            return {"error": "Place all flag and bomb pieces first"}
+
+        self._fill_rps(player)
+
+        if self.mode == "online":
+            # Mark this player as done
+            if player == 1:
+                self.p1_setup_done = True
+            else:
+                self.p2_setup_done = True
+
+            if self.p1_setup_done and self.p2_setup_done:
+                self.phase = "play"
+                self.current_player = 1
+                self.turn_count = 0
+                self._add_log("Game started!")
+                return {"next": "play", "bothDone": True}
+            else:
+                return {"next": "waiting", "bothDone": False}
         else:
-            self.phase = "play"
-            self.current_player = 1
-            self.turn_count = 0
-            self._add_log("Game started!")
-            return {"next": "play"}
+            # Local mode: sequential setup
+            if player == 1:
+                self.setup_player = 2
+                return {"next": "setup", "player": 2}
+            else:
+                self.phase = "play"
+                self.current_player = 1
+                self.turn_count = 0
+                self._add_log("Game started!")
+                return {"next": "play"}
 
     # ── moves ───────────────────────────────────────────────────────────────
 
@@ -186,6 +218,7 @@ class Game:
                 f"P{self.current_player} moved {piece.type} ({fr},{fc})->({tr},{tc})"
             )
             result = {"action": "move"}
+            self.last_combat = None
         else:
             result = self._resolve_combat(fr, fc, tr, tc, piece, defender)
 
@@ -216,13 +249,15 @@ class Game:
                 f"P{attacker.owner} {attacker.type} captured P{defender.owner}'s FLAG!"
             )
             self._end_game(attacker.owner, f"Player {attacker.owner} captured the flag!")
-            return {
+            result = {
                 "action": "capture_flag",
                 "attacker": attacker.type,
                 "defender": "flag",
                 "game_over": True,
                 "winner": attacker.owner,
             }
+            self.last_combat = result
+            return result
 
         # vs bomb
         if defender.type == "bomb":
@@ -231,11 +266,13 @@ class Game:
             self._add_log(
                 f"P{attacker.owner} {attacker.type} hit a BOMB! Both destroyed."
             )
-            return {
+            result = {
                 "action": "bomb",
                 "attacker": attacker.type,
                 "defender": "bomb",
             }
+            self.last_combat = result
+            return result
 
         # RPS
         outcome = self._rps(attacker.type, defender.type)
@@ -256,12 +293,14 @@ class Game:
                 f"{attacker.type} vs {defender.type} — DRAW! Both revealed."
             )
 
-        return {
+        result = {
             "action": "combat",
             "attacker": attacker.type,
             "defender": defender.type,
             "outcome": outcome,
         }
+        self.last_combat = result
+        return result
 
     @staticmethod
     def _rps(a: str, d: str) -> str:
@@ -303,99 +342,50 @@ class Game:
                 row.append(p.to_dict(viewer) if p else None)
             grid_data.append(row)
 
-        return {
+        d = {
             "size": self.size,
             "grid": grid_data,
             "phase": self.phase,
-            "setupPlayer": self.setup_player if self.phase == "setup" else None,
-            "setupRemaining": self.setup_remaining() if self.phase == "setup" else None,
             "currentPlayer": self.current_player,
             "turnCount": self.turn_count,
             "winner": self.winner,
             "log": self.log[-20:],  # last 20 entries
             "distribution": self.distribution,
+            "mode": self.mode,
+            "lastCombat": self.last_combat,
         }
 
+        if self.phase == "setup":
+            if self.mode == "online":
+                d["setupPlayer"] = viewer  # each player sets up their own
+                d["setupRemaining"] = self.setup_remaining(viewer)
+                d["p1SetupDone"] = self.p1_setup_done
+                d["p2SetupDone"] = self.p2_setup_done
+            else:
+                d["setupPlayer"] = self.setup_player
+                d["setupRemaining"] = self.setup_remaining(self.setup_player)
 
-# ── API routes ──────────────────────────────────────────────────────────────
-
-
-@app.route("/")
-def index():
-    return send_from_directory("static", "index.html")
-
-
-@app.route("/api/new-game", methods=["POST"])
-def new_game():
-    global game
-    data = request.get_json(force=True)
-    size = data.get("size", 8)
-    if size < 4 or size > 16:
-        return jsonify({"error": "Board size must be between 4 and 16"}), 400
-    game = Game(size)
-    return jsonify({"ok": True, "size": size, "distribution": game.distribution})
+        return d
 
 
-@app.route("/api/state")
-def get_state():
-    if game is None:
-        return jsonify({"error": "No game in progress"}), 400
-    viewer = int(request.args.get("viewer", 1))
-    return jsonify(game.to_dict(viewer))
+class GameRoom:
+    def __init__(self, game_id: str, size: int, mode: str):
+        self.id = game_id
+        self.game = Game(size, mode)
+        self.mode = mode  # "local" or "online"
+        self.host_token = generate_token()
+        self.guest_token: str | None = None
+        self.player_tokens: dict[str, int] = {self.host_token: 1}
+        self.created_at = time.time()
+        self.last_activity = time.time()
+        self.version = 0
 
+    def touch(self):
+        self.last_activity = time.time()
 
-@app.route("/api/setup/place", methods=["POST"])
-def setup_place():
-    if game is None:
-        return jsonify({"error": "No game in progress"}), 400
-    data = request.get_json(force=True)
-    result = game.place_setup_piece(data["r"], data["c"], data["type"])
-    if "error" in result:
-        return jsonify(result), 400
-    return jsonify(result)
+    def bump_version(self):
+        self.version += 1
+        self.touch()
 
-
-@app.route("/api/setup/remove", methods=["POST"])
-def setup_remove():
-    if game is None:
-        return jsonify({"error": "No game in progress"}), 400
-    data = request.get_json(force=True)
-    result = game.remove_setup_piece(data["r"], data["c"])
-    if "error" in result:
-        return jsonify(result), 400
-    return jsonify(result)
-
-
-@app.route("/api/setup/done", methods=["POST"])
-def setup_done():
-    if game is None:
-        return jsonify({"error": "No game in progress"}), 400
-    result = game.finish_setup()
-    if "error" in result:
-        return jsonify(result), 400
-    return jsonify(result)
-
-
-@app.route("/api/moves", methods=["GET"])
-def get_moves():
-    if game is None:
-        return jsonify({"error": "No game in progress"}), 400
-    r = int(request.args["r"])
-    c = int(request.args["c"])
-    return jsonify({"moves": game.get_valid_moves(r, c)})
-
-
-@app.route("/api/move", methods=["POST"])
-def make_move():
-    if game is None:
-        return jsonify({"error": "No game in progress"}), 400
-    data = request.get_json(force=True)
-    result = game.make_move(data["fr"], data["fc"], data["tr"], data["tc"])
-    if "error" in result:
-        return jsonify(result), 400
-    return jsonify(result)
-
-
-if __name__ == "__main__":
-    print("Starting RPS Stratego server on http://localhost:5000")
-    app.run(debug=True, port=5000)
+    def player_for_token(self, token: str) -> int | None:
+        return self.player_tokens.get(token)

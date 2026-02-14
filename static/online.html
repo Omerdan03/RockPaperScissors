@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPS Stratego - Online</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --accent1: #e94560;
+    --accent2: #53d8fb;
+    --text: #eee;
+    --text-dim: #888;
+    --cell-size: 64px;
+    --gold: #f5c842;
+    --p1: #e94560;
+    --p2: #53d8fb;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    user-select: none;
+  }
+
+  h1 {
+    margin: 18px 0 4px;
+    font-size: 1.6rem;
+    letter-spacing: 2px;
+    color: var(--gold);
+  }
+  .subtitle {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  .screen { display: none; flex-direction: column; align-items: center; }
+  .screen.active { display: flex; }
+
+  /* host screen */
+  #host-screen {
+    gap: 18px;
+    margin-top: 40px;
+    background: var(--surface);
+    padding: 36px 48px;
+    border-radius: 12px;
+    border: 1px solid var(--surface2);
+  }
+  #host-screen label { font-size: 1.1rem; }
+  #host-screen select {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid #334;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 1rem;
+    width: 140px;
+    text-align: center;
+  }
+
+  .btn {
+    background: var(--accent1);
+    color: #fff;
+    border: none;
+    padding: 10px 28px;
+    font-size: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .2s;
+    font-weight: 600;
+  }
+  .btn:hover { background: #c33a50; }
+  .btn.secondary { background: var(--surface2); }
+  .btn.secondary:hover { background: #1a4a7a; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+
+  .info {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    max-width: 340px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  /* waiting screen */
+  #waiting-screen {
+    gap: 24px;
+    margin-top: 60px;
+    text-align: center;
+  }
+  .room-code {
+    font-size: 3rem;
+    letter-spacing: 8px;
+    font-weight: 700;
+    color: var(--gold);
+    background: var(--surface);
+    padding: 16px 32px;
+    border-radius: 12px;
+    border: 2px solid var(--surface2);
+    cursor: pointer;
+  }
+  .room-code:hover { border-color: var(--gold); }
+  .waiting-text {
+    color: var(--text-dim);
+    font-size: 1.1rem;
+  }
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid var(--text-dim);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-left: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* game area */
+  #game-screen {
+    gap: 10px;
+    margin-top: 10px;
+    width: 100%;
+  }
+
+  #turn-bar {
+    font-size: 1.1rem;
+    padding: 6px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+  .p1-bar { background: var(--p1); }
+  .p2-bar { background: var(--p2); color: #111; }
+
+  #setup-instructions {
+    font-size: 0.95rem;
+    color: var(--gold);
+    min-height: 1.4em;
+    text-align: center;
+  }
+
+  #board {
+    display: grid;
+    gap: 2px;
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 4px;
+    padding: 2px;
+  }
+  .cell {
+    width: var(--cell-size);
+    height: var(--cell-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 3px;
+    position: relative;
+    transition: background .15s, box-shadow .15s;
+  }
+  .cell.zone-p1 { background: #2a1520; }
+  .cell.zone-p2 { background: #152025; }
+  .cell.zone-neutral { background: #1e1e30; }
+  .cell:hover { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.15); }
+  .cell.selected { box-shadow: inset 0 0 0 3px var(--gold) !important; background: #3a3520 !important; }
+  .cell.move-target { box-shadow: inset 0 0 0 3px #4f4 !important; cursor: pointer; }
+  .cell.move-target::after {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: rgba(68,255,68,0.35);
+  }
+  .cell.move-target-attack { box-shadow: inset 0 0 0 3px #f44 !important; }
+  .cell.setup-target { box-shadow: inset 0 0 0 2px rgba(245,200,66,0.3); }
+
+  .piece {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    border: 3px solid;
+    flex-direction: column;
+    line-height: 1;
+    position: relative;
+  }
+  .piece.p1 { border-color: var(--p1); background: rgba(233,69,96,0.18); }
+  .piece.p2 { border-color: var(--p2); background: rgba(83,216,251,0.18); }
+  .piece .icon { font-size: 1.3rem; }
+  .piece .lbl { font-size: 0.42rem; letter-spacing: 1px; margin-top: 1px; opacity: 0.9; }
+  .piece.revealed-enemy { box-shadow: 0 0 8px rgba(245,200,66,0.5); }
+  .piece.hidden-piece { opacity: 0.7; }
+
+  #setup-palette {
+    display: flex;
+    gap: 12px;
+    min-height: 62px;
+    align-items: center;
+  }
+  .palette-item {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    cursor: pointer;
+    border: 3px solid #555;
+    background: var(--surface2);
+    transition: border-color .15s, transform .15s;
+  }
+  .palette-item:hover { border-color: var(--gold); transform: scale(1.08); }
+  .palette-item.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(245,200,66,0.4); transform: scale(1.1); }
+  .palette-item .icon { font-size: 1.2rem; }
+  .palette-item .lbl { font-size: 0.4rem; letter-spacing: 1px; }
+  .palette-item .cnt { font-size: 0.55rem; color: var(--text-dim); }
+
+  #done-setup-btn { display: none; }
+
+  /* setup waiting */
+  #setup-waiting {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  #setup-waiting.active { display: flex; }
+
+  #log-container {
+    width: 100%;
+    max-width: 620px;
+    margin-top: 8px;
+  }
+  #log-container h3 { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 4px; }
+  #game-log {
+    background: var(--surface);
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 8px 12px;
+    max-height: 130px;
+    overflow-y: auto;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .log-entry { border-bottom: 1px solid #222; padding: 2px 0; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-battle { color: var(--gold); }
+  .log-win { color: #4f4; font-weight: 700; }
+  .log-move { color: #aaa; }
+
+  #combat-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 90;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #combat-overlay.active { display: flex; }
+  .combat-box {
+    background: var(--surface);
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    padding: 30px 40px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .combat-pieces {
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    font-size: 2.5rem;
+  }
+  .combat-vs { color: var(--gold); font-weight: 700; font-size: 1.2rem; }
+  .combat-result { font-size: 1.1rem; font-weight: 600; }
+  .combat-result.win { color: #4f4; }
+  .combat-result.lose { color: #f44; }
+  .combat-result.draw { color: var(--gold); }
+  .combat-result.bomb { color: #f80; }
+
+  #win-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+  }
+  #win-overlay.active { display: flex; }
+  #win-overlay h2 { font-size: 2.2rem; color: var(--gold); }
+  #win-overlay p { font-size: 1.1rem; }
+
+  @media (max-width: 600px) {
+    :root { --cell-size: 48px; }
+    .piece { width: 40px; height: 40px; }
+    .piece .icon { font-size: 1rem; }
+    .palette-item { width: 46px; height: 46px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>RPS STRATEGO</h1>
+<div class="subtitle">Online Game</div>
+
+<!-- HOST CONFIG -->
+<div id="host-screen" class="screen">
+  <label for="board-size">Board Size</label>
+  <select id="board-size">
+    <option value="6">6 &times; 6</option>
+    <option value="8" selected>8 &times; 8</option>
+    <option value="10">10 &times; 10</option>
+    <option value="12">12 &times; 12</option>
+  </select>
+  <div id="piece-preview" class="info"></div>
+  <button class="btn" id="create-room-btn">Create Room</button>
+</div>
+
+<!-- WAITING FOR OPPONENT -->
+<div id="waiting-screen" class="screen">
+  <h2>Room Created</h2>
+  <div class="room-code" id="room-code-display" title="Click to copy"></div>
+  <div class="waiting-text">Share this code with your opponent</div>
+  <div class="waiting-text">Waiting for opponent to join...<span class="spinner"></span></div>
+</div>
+
+<!-- GAME -->
+<div id="game-screen" class="screen">
+  <div id="turn-bar"></div>
+  <div id="setup-instructions"></div>
+  <div id="setup-palette"></div>
+  <button class="btn" id="done-setup-btn">Done Placing</button>
+  <div id="setup-waiting">
+    <div class="waiting-text">Waiting for opponent to finish setup...<span class="spinner"></span></div>
+  </div>
+  <div id="board"></div>
+  <div id="log-container">
+    <h3>Game Log</h3>
+    <div id="game-log"></div>
+  </div>
+</div>
+
+<!-- COMBAT POPUP -->
+<div id="combat-overlay">
+  <div class="combat-box">
+    <div class="combat-pieces">
+      <span id="combat-atk"></span>
+      <span class="combat-vs">VS</span>
+      <span id="combat-def"></span>
+    </div>
+    <div id="combat-result-text" class="combat-result"></div>
+    <button class="btn" id="combat-ok-btn">OK</button>
+  </div>
+</div>
+
+<!-- WIN OVERLAY -->
+<div id="win-overlay">
+  <h2 id="win-title"></h2>
+  <p id="win-msg"></p>
+  <button class="btn" id="play-again-btn">Back to Menu</button>
+</div>
+
+<script>
+// ===== Constants =====
+const ICONS = {
+  rock: '\u270A', paper: '\u270B', scissors: '\u2702\uFE0F',
+  flag: '\u2691', bomb: '\uD83D\uDCA3', unknown: '?'
+};
+const LABELS = {
+  rock: 'ROCK', paper: 'PAPER', scissors: 'SCISSORS',
+  flag: 'FLAG', bomb: 'BOMB', unknown: ''
+};
+
+const POLL_INTERVAL = 1500;
+
+// ===== State =====
+let state = null;
+let gameId = sessionStorage.getItem('gameId');
+let token = sessionStorage.getItem('token');
+let myPlayer = parseInt(sessionStorage.getItem('player')) || 0;
+let selectedCell = null;
+let validMoves = [];
+let setupSelectedType = null;
+let pollTimer = null;
+let currentVersion = -1;
+let mySetupDone = false;
+let lastCombatSeen = null; // track combat we've already shown
+
+// ===== API helpers =====
+async function api(url, method = 'GET', body = null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) {
+    if (method !== 'GET') {
+      body.game_id = gameId;
+      body.token = token;
+      opts.body = JSON.stringify(body);
+    }
+  } else if (method !== 'GET') {
+    opts.body = JSON.stringify({ game_id: gameId, token: token });
+  }
+  if (method === 'GET') {
+    const sep = url.includes('?') ? '&' : '?';
+    url += `${sep}game_id=${gameId}&token=${token}`;
+  }
+  const res = await fetch(url, opts);
+  return res.json();
+}
+
+async function fetchState() {
+  state = await api('/api/state');
+  if (state.version !== undefined) currentVersion = state.version;
+  return state;
+}
+
+async function pollForChanges() {
+  try {
+    const res = await api(`/api/state?version=${currentVersion}`);
+    if (res.changed === false) return false;
+    state = res;
+    currentVersion = res.version;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ===== Screen management =====
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// ===== Config preview =====
+function calcPreview(size) {
+  const total = size * 2;
+  const remaining = total - 3;
+  const base = Math.floor(remaining / 3);
+  const rem = remaining % 3;
+  return {
+    rock: base + (rem > 0 ? 1 : 0),
+    paper: base + (rem > 1 ? 1 : 0),
+    scissors: base,
+    flag: 1, bomb: 2, total
+  };
+}
+
+function updatePreview() {
+  const size = parseInt(document.getElementById('board-size').value);
+  const d = calcPreview(size);
+  document.getElementById('piece-preview').innerHTML =
+    `Per player: ~${d.rock}${ICONS.rock} ~${d.paper}${ICONS.paper} ~${d.scissors}${ICONS.scissors} ` +
+    `1${ICONS.flag} 2${ICONS.bomb}<br>Total: ${d.total} pieces each &middot; Deployment: 2 rows`;
+}
+
+// ===== Initialization =====
+function init() {
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get('action') === 'host') {
+    // Host flow: show config
+    showScreen('host-screen');
+    document.getElementById('board-size').addEventListener('change', updatePreview);
+    updatePreview();
+  } else if (gameId && token && myPlayer) {
+    // Join flow (or refresh): go straight to fetching state
+    enterGame();
+  } else {
+    // No session data, go back to menu
+    window.location.href = '/';
+  }
+}
+
+// ===== Host: Create Room =====
+document.getElementById('create-room-btn').addEventListener('click', async () => {
+  const size = parseInt(document.getElementById('board-size').value);
+  const res = await fetch('/api/rooms/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ size, mode: 'online' }),
+  });
+  const data = await res.json();
+  gameId = data.gameId;
+  token = data.token;
+  myPlayer = data.player;
+  sessionStorage.setItem('gameId', gameId);
+  sessionStorage.setItem('token', token);
+  sessionStorage.setItem('player', myPlayer);
+
+  // Show waiting screen with room code
+  document.getElementById('room-code-display').textContent = gameId;
+  showScreen('waiting-screen');
+
+  // Poll for opponent join
+  pollTimer = setInterval(async () => {
+    const changed = await pollForChanges();
+    if (changed && state.opponentJoined) {
+      stopPolling();
+      enterSetup();
+    }
+  }, POLL_INTERVAL);
+});
+
+// Copy room code on click
+document.getElementById('room-code-display').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('room-code-display').textContent);
+  document.getElementById('room-code-display').title = 'Copied!';
+  setTimeout(() => { document.getElementById('room-code-display').title = 'Click to copy'; }, 1500);
+});
+
+// ===== Enter game (join flow or refresh) =====
+async function enterGame() {
+  await fetchState();
+  if (state.phase === 'setup') {
+    enterSetup();
+  } else if (state.phase === 'play') {
+    enterPlay();
+  } else if (state.phase === 'over') {
+    enterPlay();
+    showWin(state.winner);
+  }
+}
+
+// ===== Setup =====
+function enterSetup() {
+  stopPolling();
+  mySetupDone = false;
+  showScreen('game-screen');
+  document.getElementById('setup-waiting').classList.remove('active');
+  setupSelectedType = null;
+  fetchState().then(() => {
+    renderSetupUI();
+    renderBoard();
+    updateTurnBar();
+  });
+}
+
+function renderSetupUI() {
+  if (!state || state.phase !== 'setup') return;
+  const remaining = state.setupRemaining;
+  const palette = document.getElementById('setup-palette');
+  palette.innerHTML = '';
+
+  if (mySetupDone) {
+    palette.innerHTML = '';
+    document.getElementById('setup-instructions').textContent = '';
+    document.getElementById('done-setup-btn').style.display = 'none';
+    return;
+  }
+
+  const types = ['flag', 'bomb'];
+  let anyLeft = false;
+
+  types.forEach(t => {
+    const count = remaining[t];
+    if (count <= 0) return;
+    anyLeft = true;
+    const el = document.createElement('div');
+    el.className = 'palette-item' + (setupSelectedType === t ? ' active' : '');
+    el.innerHTML = `<span class="icon">${ICONS[t]}</span><span class="lbl">${LABELS[t]}</span><span class="cnt">&times;${count}</span>`;
+    el.onclick = () => { setupSelectedType = t; renderSetupUI(); };
+    palette.appendChild(el);
+  });
+
+  if (anyLeft && !setupSelectedType) {
+    const avail = types.filter(t => remaining[t] > 0);
+    if (avail.length === 1) {
+      setupSelectedType = avail[0];
+      renderSetupUI();
+      return;
+    }
+  }
+
+  const instrEl = document.getElementById('setup-instructions');
+  const doneBtn = document.getElementById('done-setup-btn');
+
+  if (!anyLeft) {
+    instrEl.textContent = 'All pieces placed! Click "Done Placing" to auto-fill R/P/S and continue.';
+    doneBtn.style.display = 'inline-block';
+  } else {
+    const sel = setupSelectedType ? LABELS[setupSelectedType] : '(select a piece)';
+    instrEl.textContent = `Select a piece type, then click a cell in your zone. Placing: ${sel}. Right-click to remove.`;
+    doneBtn.style.display = 'none';
+  }
+}
+
+document.getElementById('done-setup-btn').addEventListener('click', async () => {
+  const result = await api('/api/setup/done', 'POST', {});
+  if (result.error) {
+    alert(result.error);
+    return;
+  }
+  document.getElementById('setup-palette').innerHTML = '';
+  document.getElementById('setup-instructions').textContent = '';
+  document.getElementById('done-setup-btn').style.display = 'none';
+  mySetupDone = true;
+
+  if (result.bothDone) {
+    // Both done, go to play
+    await fetchState();
+    enterPlay();
+  } else {
+    // Wait for opponent
+    document.getElementById('setup-waiting').classList.add('active');
+    await fetchState();
+    renderBoard();
+    pollTimer = setInterval(async () => {
+      const changed = await pollForChanges();
+      if (changed && state.phase === 'play') {
+        stopPolling();
+        document.getElementById('setup-waiting').classList.remove('active');
+        enterPlay();
+      }
+    }, POLL_INTERVAL);
+  }
+});
+
+// ===== Play =====
+function enterPlay() {
+  stopPolling();
+  showScreen('game-screen');
+  document.getElementById('setup-palette').innerHTML = '';
+  document.getElementById('setup-instructions').textContent = '';
+  document.getElementById('done-setup-btn').style.display = 'none';
+  document.getElementById('setup-waiting').classList.remove('active');
+  selectedCell = null;
+  validMoves = [];
+  lastCombatSeen = null;
+  renderBoard();
+  updateTurnBar();
+  renderLog();
+
+  // Start polling if it's opponent's turn
+  startPlayPolling();
+}
+
+function startPlayPolling() {
+  stopPolling();
+  if (state.phase === 'over') return;
+
+  pollTimer = setInterval(async () => {
+    if (state.phase === 'over') { stopPolling(); return; }
+    const changed = await pollForChanges();
+    if (!changed) return;
+
+    // Check for new combat to show (opponent made a combat move)
+    if (state.lastCombat && state.lastCombat !== lastCombatSeen) {
+      const lc = state.lastCombat;
+      const combatKey = `${lc.action}-${lc.attacker}-${lc.defender}-${lc.outcome || ''}`;
+      if (combatKey !== lastCombatSeen) {
+        lastCombatSeen = combatKey;
+        // Only show popup if it's now our turn (opponent just moved)
+        if (state.currentPlayer === myPlayer || state.phase === 'over') {
+          await showCombatPopup(lc);
+        }
+      }
+    }
+
+    renderBoard();
+    updateTurnBar();
+    renderLog();
+
+    if (state.phase === 'over') {
+      stopPolling();
+      showWin(state.winner);
+    }
+  }, POLL_INTERVAL);
+}
+
+// ===== Board rendering =====
+function renderBoard() {
+  if (!state) return;
+  const board = document.getElementById('board');
+  board.style.gridTemplateColumns = `repeat(${state.size}, var(--cell-size))`;
+  board.innerHTML = '';
+
+  const p1Rows = [state.size - 2, state.size - 1];
+  const p2Rows = [0, 1];
+  const myDeployRows = myPlayer === 1 ? p1Rows : p2Rows;
+  const isMyTurn = state.phase === 'play' && state.currentPlayer === myPlayer;
+  const isMySetup = state.phase === 'setup' && !mySetupDone;
+
+  for (let r = 0; r < state.size; r++) {
+    for (let c = 0; c < state.size; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+
+      if (p1Rows.includes(r)) cell.classList.add('zone-p1');
+      else if (p2Rows.includes(r)) cell.classList.add('zone-p2');
+      else cell.classList.add('zone-neutral');
+
+      if (selectedCell && selectedCell.r === r && selectedCell.c === c) {
+        cell.classList.add('selected');
+      }
+
+      const isTarget = validMoves.some(m => m.r === r && m.c === c);
+      if (isTarget) {
+        const targetPiece = state.grid[r][c];
+        if (targetPiece) {
+          cell.classList.add('move-target-attack');
+        } else {
+          cell.classList.add('move-target');
+        }
+      }
+
+      if (isMySetup && myDeployRows.includes(r) && !state.grid[r][c]) {
+        cell.classList.add('setup-target');
+      }
+
+      const p = state.grid[r][c];
+      if (p) {
+        const pel = document.createElement('div');
+        pel.className = 'piece ' + (p.owner === 1 ? 'p1' : 'p2');
+
+        if (p.type !== 'unknown') {
+          pel.innerHTML = `<span class="icon">${ICONS[p.type]}</span><span class="lbl">${LABELS[p.type]}</span>`;
+          if (p.revealed && p.owner !== myPlayer) {
+            pel.classList.add('revealed-enemy');
+          }
+        } else {
+          pel.innerHTML = `<span class="icon">?</span>`;
+          pel.classList.add('hidden-piece');
+        }
+        cell.appendChild(pel);
+      }
+
+      cell.addEventListener('click', () => onCellClick(r, c));
+      cell.addEventListener('contextmenu', (e) => { e.preventDefault(); onCellRightClick(r, c); });
+
+      board.appendChild(cell);
+    }
+  }
+}
+
+function updateTurnBar() {
+  if (!state) return;
+  const bar = document.getElementById('turn-bar');
+  if (state.phase === 'setup') {
+    bar.textContent = `Setup Phase \u2014 You are Player ${myPlayer}`;
+    bar.className = myPlayer === 1 ? 'p1-bar' : 'p2-bar';
+  } else if (state.phase === 'play') {
+    if (state.currentPlayer === myPlayer) {
+      bar.textContent = `YOUR TURN \u2014 Turn ${state.turnCount + 1}`;
+    } else {
+      bar.textContent = `WAITING FOR OPPONENT... \u2014 Turn ${state.turnCount + 1}`;
+    }
+    bar.className = state.currentPlayer === 1 ? 'p1-bar' : 'p2-bar';
+  } else {
+    bar.textContent = 'Game Over';
+    bar.className = state.winner === 1 ? 'p1-bar' : 'p2-bar';
+  }
+  bar.id = 'turn-bar';
+}
+
+function renderLog() {
+  if (!state) return;
+  const log = document.getElementById('game-log');
+  log.innerHTML = '';
+  const entries = (state.log || []).slice().reverse();
+  entries.forEach(text => {
+    const el = document.createElement('div');
+    el.className = 'log-entry';
+    if (text.includes('beats') || text.includes('BOMB') || text.includes('DRAW') || text.includes('FLAG')) {
+      el.classList.add('log-battle');
+    } else if (text.includes('Wins') || text.includes('captured')) {
+      el.classList.add('log-win');
+    } else {
+      el.classList.add('log-move');
+    }
+    el.textContent = text;
+    log.appendChild(el);
+  });
+}
+
+// ===== Click handlers =====
+async function onCellClick(r, c) {
+  if (state.phase === 'setup' && !mySetupDone) {
+    await handleSetupClick(r, c);
+    return;
+  }
+  if (state.phase !== 'play') return;
+  if (state.currentPlayer !== myPlayer) return; // not my turn
+
+  if (validMoves.some(m => m.r === r && m.c === c)) {
+    await executeMove(selectedCell.r, selectedCell.c, r, c);
+    return;
+  }
+
+  const p = state.grid[r][c];
+  if (p && p.owner === myPlayer && p.type !== 'unknown' && p.type !== 'flag' && p.type !== 'bomb') {
+    selectedCell = { r, c };
+    const movesData = await api(`/api/moves?r=${r}&c=${c}`);
+    validMoves = movesData.moves || [];
+    renderBoard();
+    return;
+  }
+
+  selectedCell = null;
+  validMoves = [];
+  renderBoard();
+}
+
+async function onCellRightClick(r, c) {
+  if (state.phase !== 'setup' || mySetupDone) return;
+  const p = state.grid[r][c];
+  if (!p || p.owner !== myPlayer) return;
+  if (p.type !== 'flag' && p.type !== 'bomb') return;
+
+  await api('/api/setup/remove', 'POST', { r, c });
+  await fetchState();
+  renderSetupUI();
+  renderBoard();
+}
+
+async function handleSetupClick(r, c) {
+  if (!setupSelectedType) return;
+  const deployRows = myPlayer === 1 ? [state.size - 2, state.size - 1] : [0, 1];
+  if (!deployRows.includes(r)) return;
+  if (state.grid[r][c]) return;
+
+  const result = await api('/api/setup/place', 'POST', { r, c, type: setupSelectedType });
+  if (result.error) return;
+
+  await fetchState();
+  if (state.setupRemaining[setupSelectedType] <= 0) {
+    setupSelectedType = null;
+  }
+  renderSetupUI();
+  renderBoard();
+}
+
+// ===== Move execution =====
+async function executeMove(fr, fc, tr, tc) {
+  stopPolling(); // pause polling during our move
+
+  const result = await api('/api/move', 'POST', { fr, fc, tr, tc });
+  if (result.error) {
+    alert(result.error);
+    startPlayPolling();
+    return;
+  }
+
+  selectedCell = null;
+  validMoves = [];
+
+  if (result.action === 'combat' || result.action === 'bomb' || result.action === 'capture_flag') {
+    // Track this combat so we don't show it again from polling
+    lastCombatSeen = `${result.action}-${result.attacker}-${result.defender}-${result.outcome || ''}`;
+    await showCombatPopup(result);
+  }
+
+  await fetchState();
+  renderBoard();
+  renderLog();
+  updateTurnBar();
+
+  if (result.game_over || state.phase === 'over') {
+    showWin(state.winner);
+    return;
+  }
+
+  // Resume polling (now it's opponent's turn)
+  startPlayPolling();
+}
+
+// ===== Combat popup =====
+function showCombatPopup(result) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('combat-overlay');
+    const atkEl = document.getElementById('combat-atk');
+    const defEl = document.getElementById('combat-def');
+    const textEl = document.getElementById('combat-result-text');
+
+    atkEl.textContent = ICONS[result.attacker] || '?';
+    defEl.textContent = ICONS[result.defender] || '?';
+
+    if (result.action === 'capture_flag') {
+      textEl.textContent = `${LABELS[result.attacker]} captures the FLAG!`;
+      textEl.className = 'combat-result win';
+    } else if (result.action === 'bomb') {
+      textEl.textContent = `${LABELS[result.attacker]} hits a BOMB! Both destroyed!`;
+      textEl.className = 'combat-result bomb';
+    } else if (result.outcome === 'win') {
+      textEl.textContent = `${LABELS[result.attacker]} beats ${LABELS[result.defender]}!`;
+      textEl.className = 'combat-result win';
+    } else if (result.outcome === 'lose') {
+      textEl.textContent = `${LABELS[result.attacker]} loses to ${LABELS[result.defender]}!`;
+      textEl.className = 'combat-result lose';
+    } else {
+      textEl.textContent = `${LABELS[result.attacker]} vs ${LABELS[result.defender]} \u2014 DRAW! Both revealed.`;
+      textEl.className = 'combat-result draw';
+    }
+
+    overlay.classList.add('active');
+    document.getElementById('combat-ok-btn').onclick = () => {
+      overlay.classList.remove('active');
+      resolve();
+    };
+  });
+}
+
+// ===== Win =====
+function showWin(winner) {
+  stopPolling();
+  const overlay = document.getElementById('win-overlay');
+  const msg = winner === myPlayer ? 'You Win!' : 'You Lose!';
+  document.getElementById('win-title').textContent = msg;
+  document.getElementById('win-msg').textContent = state.log[state.log.length - 1] || '';
+  overlay.classList.add('active');
+  renderBoard();
+  renderLog();
+}
+
+document.getElementById('play-again-btn').addEventListener('click', () => {
+  sessionStorage.clear();
+  window.location.href = '/';
+});
+
+// ===== Start =====
+init();
+</script>
+</body>
+</html>

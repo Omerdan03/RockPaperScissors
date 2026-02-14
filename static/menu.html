@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPS Stratego</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --accent1: #e94560;
+    --accent2: #53d8fb;
+    --text: #eee;
+    --text-dim: #888;
+    --gold: #f5c842;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+
+  .menu-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  h1 {
+    font-size: 2.8rem;
+    letter-spacing: 4px;
+    color: var(--gold);
+    margin-bottom: 0;
+  }
+  .subtitle {
+    font-size: 1rem;
+    color: var(--text-dim);
+    margin-bottom: 32px;
+  }
+
+  .btn {
+    background: var(--accent1);
+    color: #fff;
+    border: none;
+    padding: 14px 40px;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background .2s, transform .1s;
+    font-weight: 600;
+    width: 260px;
+    text-align: center;
+  }
+  .btn:hover { background: #c33a50; transform: scale(1.03); }
+  .btn.secondary { background: var(--surface2); }
+  .btn.secondary:hover { background: #1a4a7a; }
+  .btn.accent2 { background: #2a8a9e; }
+  .btn.accent2:hover { background: #1e6e80; }
+
+  .join-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+    margin-top: 0;
+  }
+  .join-section.open {
+    max-height: 200px;
+    opacity: 1;
+    margin-top: 8px;
+  }
+
+  .join-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .join-input {
+    background: var(--surface2);
+    color: var(--text);
+    border: 2px solid #334;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 1.1rem;
+    width: 160px;
+    text-align: center;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .join-input::placeholder {
+    letter-spacing: 1px;
+    text-transform: none;
+    font-weight: 400;
+    opacity: 0.5;
+  }
+  .join-input:focus {
+    outline: none;
+    border-color: var(--accent2);
+  }
+
+  .join-go {
+    background: var(--accent2);
+    color: #111;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    transition: background .2s;
+  }
+  .join-go:hover { background: #3ae0ff; }
+
+  .error-msg {
+    color: var(--accent1);
+    font-size: 0.85rem;
+    min-height: 1.2em;
+  }
+</style>
+</head>
+<body>
+
+<div class="menu-container">
+  <h1>RPS STRATEGO</h1>
+  <div class="subtitle">Stratego meets Rock-Paper-Scissors</div>
+
+  <button class="btn" id="local-btn">Local Game</button>
+  <button class="btn accent2" id="host-btn">Host Game</button>
+  <button class="btn secondary" id="join-toggle-btn">Join Game</button>
+
+  <div class="join-section" id="join-section">
+    <div class="join-row">
+      <input type="text" class="join-input" id="join-code" placeholder="CODE" maxlength="6" autocomplete="off">
+      <button class="join-go" id="join-btn">Join</button>
+    </div>
+    <div class="error-msg" id="join-error"></div>
+  </div>
+</div>
+
+<script>
+document.getElementById('local-btn').addEventListener('click', () => {
+  window.location.href = '/local';
+});
+
+document.getElementById('host-btn').addEventListener('click', () => {
+  window.location.href = '/online?action=host';
+});
+
+document.getElementById('join-toggle-btn').addEventListener('click', () => {
+  const section = document.getElementById('join-section');
+  section.classList.toggle('open');
+  if (section.classList.contains('open')) {
+    document.getElementById('join-code').focus();
+  }
+});
+
+document.getElementById('join-code').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('join-btn').click();
+});
+
+document.getElementById('join-btn').addEventListener('click', async () => {
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  const errorEl = document.getElementById('join-error');
+  errorEl.textContent = '';
+
+  if (code.length !== 6) {
+    errorEl.textContent = 'Enter a 6-character room code';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/rooms/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: code }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      errorEl.textContent = data.error;
+      return;
+    }
+
+    sessionStorage.setItem('gameId', data.gameId);
+    sessionStorage.setItem('token', data.token);
+    sessionStorage.setItem('player', data.player);
+    window.location.href = '/online';
+  } catch (err) {
+    errorEl.textContent = 'Connection failed';
+  }
+});
+</script>
+</body>
+</html>
