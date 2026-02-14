@@ -21,6 +21,21 @@ def get_room_and_player() -> tuple:
     if player is None:
         return None, None, "Invalid token"
     room.touch()
+
+    # Local mode: single token shared by both players.
+    # Use viewer query param if present, otherwise infer from game state.
+    if room.mode == "local":
+        viewer = request.args.get("viewer")
+        if viewer is not None:
+            try:
+                player = int(viewer)
+            except ValueError:
+                pass
+        elif room.game.phase == "setup":
+            player = room.game.setup_player
+        elif room.game.phase in ("play", "over"):
+            player = room.game.current_player
+
     return room, player, None
 
 

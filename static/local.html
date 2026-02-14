@@ -158,7 +158,7 @@
   .piece {
     width: 50px;
     height: 50px;
-    border-radius: 50%;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -167,13 +167,88 @@
     flex-direction: column;
     line-height: 1;
     position: relative;
+    overflow: visible;
   }
   .piece.p1 { border-color: var(--p1); background: rgba(233,69,96,0.18); }
   .piece.p2 { border-color: var(--p2); background: rgba(83,216,251,0.18); }
-  .piece .icon { font-size: 1.3rem; }
-  .piece .lbl { font-size: 0.42rem; letter-spacing: 1px; margin-top: 1px; opacity: 0.9; }
   .piece.revealed-enemy { box-shadow: 0 0 8px rgba(245,200,66,0.5); }
+  .piece.hidden-piece .char { filter: brightness(0.6); }
   .piece.hidden-piece { opacity: 0.7; }
+
+  /* Character body */
+  .char {
+    width: 22px;
+    height: 26px;
+    background: currentColor;
+    border-radius: 6px 6px 4px 4px;
+    position: relative;
+    animation: char-idle 2s ease-in-out infinite;
+  }
+  .piece.p1 .char { color: var(--p1); }
+  .piece.p2 .char { color: var(--p2); }
+  .char::before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: currentColor;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    filter: brightness(1.3);
+  }
+  .char::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 2px;
+    width: 7px;
+    height: 5px;
+    background: currentColor;
+    border-radius: 2px;
+    box-shadow: 10px 0 0 currentColor;
+    filter: brightness(0.7);
+  }
+
+  /* Scroll parchment */
+  .scroll {
+    position: absolute;
+    width: 16px;
+    height: 20px;
+    background: #d4a857;
+    border-radius: 2px 2px 3px 3px;
+    border: 1px solid #b8942e;
+    top: 50%;
+    right: 2px;
+    transform: translateY(-50%) scale(0);
+    transform-origin: center;
+    transition: transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .scroll::before {
+    content: attr(data-symbol);
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: #3a2510;
+  }
+  [data-scroll="visible"] .scroll {
+    transform: translateY(-50%) rotate(12deg) scale(1);
+    opacity: 1;
+  }
+  [data-scroll="hidden"] .scroll {
+    transform: translateY(-50%) scale(0);
+    opacity: 0;
+  }
+  [data-scroll="revealed"] .scroll {
+    transform: translateY(-50%) rotate(-5deg) scale(1);
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(245, 200, 66, 0.6);
+    background: #f0d478;
+  }
 
   #setup-palette {
     display: flex;
@@ -248,13 +323,57 @@
     align-items: center;
     gap: 16px;
   }
-  .combat-pieces {
+  .combat-arena {
     display: flex;
-    gap: 32px;
+    gap: 24px;
     align-items: center;
-    font-size: 2.5rem;
+    min-height: 120px;
   }
-  .combat-vs { color: var(--gold); font-weight: 700; font-size: 1.2rem; }
+  .combat-vs-text {
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 1.4rem;
+    z-index: 2;
+  }
+  .combat-char {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+  }
+  .combat-char .char {
+    width: 36px;
+    height: 42px;
+    border-radius: 8px 8px 6px 6px;
+    animation: none;
+  }
+  .combat-char .char::before {
+    width: 22px;
+    height: 22px;
+    top: -16px;
+  }
+  .combat-char .char::after {
+    bottom: -7px;
+    left: 4px;
+    width: 10px;
+    height: 7px;
+    box-shadow: 14px 0 0 currentColor;
+  }
+  .combat-char .scroll {
+    position: relative;
+    width: 28px;
+    height: 34px;
+    top: auto;
+    right: auto;
+    transform: scale(0) rotate(0deg);
+    transform-origin: center;
+    border-radius: 3px;
+    transition: none;
+  }
+  .combat-char .scroll::before {
+    font-size: 1rem;
+  }
   .combat-result { font-size: 1.1rem; font-weight: 600; }
   .combat-result.win { color: #4f4; }
   .combat-result.lose { color: #f44; }
@@ -276,11 +395,85 @@
   #win-overlay h2 { font-size: 2.2rem; color: var(--gold); }
   #win-overlay p { font-size: 1.1rem; }
 
+  /* Idle animation */
+  @keyframes char-idle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+  @keyframes combat-enter-left {
+    from { transform: translateX(-80px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes combat-enter-right {
+    from { transform: translateX(80px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes combat-taunt {
+    0%, 100% { transform: translateY(0) scale(1); }
+    25% { transform: translateY(-8px) scale(1.05); }
+    50% { transform: translateY(0) scale(1); }
+    75% { transform: translateY(-6px) scale(1.03); }
+  }
+  @keyframes scroll-reveal {
+    from { transform: scale(0) rotate(-30deg); }
+    to { transform: scale(1) rotate(0deg); }
+  }
+  @keyframes winner-glow {
+    0%, 100% { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+    50% { filter: brightness(1.4) drop-shadow(0 0 12px rgba(68,255,68,0.6)); }
+  }
+  @keyframes loser-fade {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0.3; transform: scale(0.85); }
+  }
+  @keyframes draw-flash {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.5) sepia(0.5); }
+  }
+  @keyframes result-pop {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .combat-char.enter-left {
+    animation: combat-enter-left 0.4s ease-out forwards;
+  }
+  .combat-char.enter-right {
+    animation: combat-enter-right 0.4s ease-out forwards;
+  }
+  .combat-char.taunt .char {
+    animation: combat-taunt 0.6s ease-in-out;
+  }
+  .combat-char.scroll-show .scroll {
+    animation: scroll-reveal 0.4s ease-out forwards;
+  }
+  .combat-char.winner {
+    animation: winner-glow 0.8s ease-in-out infinite;
+  }
+  .combat-char.loser {
+    animation: loser-fade 0.5s ease-out forwards;
+  }
+  .combat-char.draw-result {
+    animation: draw-flash 0.6s ease-in-out;
+  }
+  .combat-result.pop {
+    animation: result-pop 0.3s ease-out forwards;
+  }
+  #combat-ok-btn.pop {
+    animation: result-pop 0.3s ease-out forwards;
+  }
+
   @media (max-width: 600px) {
     :root { --cell-size: 48px; }
     .piece { width: 40px; height: 40px; }
-    .piece .icon { font-size: 1rem; }
+    .char { width: 18px; height: 20px; }
+    .char::before { width: 11px; height: 11px; top: -8px; }
+    .char::after { width: 6px; height: 4px; box-shadow: 8px 0 0 currentColor; }
+    .scroll { width: 13px; height: 16px; }
+    .scroll::before { font-size: 0.5rem; }
     .palette-item { width: 46px; height: 46px; }
+    .combat-char .char { width: 28px; height: 34px; }
+    .combat-char .scroll { width: 22px; height: 28px; }
   }
 </style>
 </head>
@@ -325,10 +518,16 @@
 <!-- COMBAT POPUP -->
 <div id="combat-overlay">
   <div class="combat-box">
-    <div class="combat-pieces">
-      <span id="combat-atk"></span>
-      <span class="combat-vs">VS</span>
-      <span id="combat-def"></span>
+    <div class="combat-arena">
+      <div class="combat-char" id="combat-atk">
+        <div class="char"></div>
+        <div class="scroll" data-symbol="?"></div>
+      </div>
+      <div class="combat-vs-text">VS</div>
+      <div class="combat-char" id="combat-def">
+        <div class="char"></div>
+        <div class="scroll" data-symbol="?"></div>
+      </div>
     </div>
     <div id="combat-result-text" class="combat-result"></div>
     <button class="btn" id="combat-ok-btn">OK</button>
@@ -351,6 +550,10 @@ const ICONS = {
 const LABELS = {
   rock: 'ROCK', paper: 'PAPER', scissors: 'SCISSORS',
   flag: 'FLAG', bomb: 'BOMB', unknown: ''
+};
+const SCROLL_SYMBOLS = {
+  rock: 'R', paper: 'P', scissors: 'S',
+  flag: 'F', bomb: 'B', unknown: '?'
 };
 
 // ===== State =====
@@ -570,15 +773,31 @@ function renderBoard() {
         const pel = document.createElement('div');
         pel.className = 'piece ' + (p.owner === 1 ? 'p1' : 'p2');
 
+        const charEl = document.createElement('div');
+        charEl.className = 'char';
+        charEl.style.animationDelay = `${((r * state.size + c) % 7) * 0.15}s`;
+        pel.appendChild(charEl);
+
+        const scrollEl = document.createElement('div');
+        scrollEl.className = 'scroll';
+
         if (p.type !== 'unknown') {
-          pel.innerHTML = `<span class="icon">${ICONS[p.type]}</span><span class="lbl">${LABELS[p.type]}</span>`;
-          if (p.revealed && p.owner !== viewer) {
+          scrollEl.setAttribute('data-symbol', SCROLL_SYMBOLS[p.type] || '?');
+          if (p.owner === viewer) {
+            pel.setAttribute('data-scroll', 'visible');
+          } else if (p.revealed) {
+            pel.setAttribute('data-scroll', 'revealed');
             pel.classList.add('revealed-enemy');
+          } else {
+            pel.setAttribute('data-scroll', 'hidden');
           }
         } else {
-          pel.innerHTML = `<span class="icon">?</span>`;
+          scrollEl.setAttribute('data-symbol', '?');
+          pel.setAttribute('data-scroll', 'hidden');
           pel.classList.add('hidden-piece');
         }
+
+        pel.appendChild(scrollEl);
         cell.appendChild(pel);
       }
 
@@ -698,7 +917,7 @@ async function executeMove(fr, fc, tr, tc) {
   validMoves = [];
 
   if (result.action === 'combat' || result.action === 'bomb' || result.action === 'capture_flag') {
-    await showCombatPopup(result);
+    await showCombatPopup(result, viewer);
   }
 
   await fetchState();
@@ -715,36 +934,99 @@ async function executeMove(fr, fc, tr, tc) {
 }
 
 // ===== Combat popup =====
-function showCombatPopup(result) {
+function showCombatPopup(result, attackerPlayer) {
   return new Promise(resolve => {
     const overlay = document.getElementById('combat-overlay');
-    const atkEl = document.getElementById('combat-atk');
-    const defEl = document.getElementById('combat-def');
+    const atkContainer = document.getElementById('combat-atk');
+    const defContainer = document.getElementById('combat-def');
+    const atkChar = atkContainer.querySelector('.char');
+    const defChar = defContainer.querySelector('.char');
+    const atkScroll = atkContainer.querySelector('.scroll');
+    const defScroll = defContainer.querySelector('.scroll');
     const textEl = document.getElementById('combat-result-text');
+    const okBtn = document.getElementById('combat-ok-btn');
+    const defenderPlayer = attackerPlayer === 1 ? 2 : 1;
 
-    atkEl.textContent = ICONS[result.attacker] || '?';
-    defEl.textContent = ICONS[result.defender] || '?';
+    // Set player colors
+    atkChar.style.color = attackerPlayer === 1 ? 'var(--p1)' : 'var(--p2)';
+    defChar.style.color = defenderPlayer === 1 ? 'var(--p1)' : 'var(--p2)';
 
-    if (result.action === 'capture_flag') {
-      textEl.textContent = `${LABELS[result.attacker]} captures the FLAG!`;
-      textEl.className = 'combat-result win';
-    } else if (result.action === 'bomb') {
-      textEl.textContent = `${LABELS[result.attacker]} hits a BOMB! Both destroyed!`;
-      textEl.className = 'combat-result bomb';
-    } else if (result.outcome === 'win') {
-      textEl.textContent = `${LABELS[result.attacker]} beats ${LABELS[result.defender]}!`;
-      textEl.className = 'combat-result win';
-    } else if (result.outcome === 'lose') {
-      textEl.textContent = `${LABELS[result.attacker]} loses to ${LABELS[result.defender]}!`;
-      textEl.className = 'combat-result lose';
-    } else {
-      textEl.textContent = `${LABELS[result.attacker]} vs ${LABELS[result.defender]} \u2014 DRAW! Both revealed.`;
-      textEl.className = 'combat-result draw';
-    }
+    // Reset state
+    atkScroll.setAttribute('data-symbol', '?');
+    defScroll.setAttribute('data-symbol', '?');
+    atkContainer.className = 'combat-char';
+    defContainer.className = 'combat-char';
+    textEl.textContent = '';
+    textEl.className = 'combat-result';
+    okBtn.style.display = 'none';
+    okBtn.className = 'btn';
 
     overlay.classList.add('active');
-    document.getElementById('combat-ok-btn').onclick = () => {
+
+    // Phase 1: Enter (0-0.4s)
+    atkContainer.classList.add('enter-left');
+    defContainer.classList.add('enter-right');
+
+    // Phase 2: Taunt (0.4-1.0s)
+    setTimeout(() => {
+      atkContainer.style.opacity = '1';
+      defContainer.style.opacity = '1';
+      atkContainer.classList.add('taunt');
+      defContainer.classList.add('taunt');
+    }, 400);
+
+    // Phase 3: Reveal scrolls (1.0-1.6s)
+    setTimeout(() => {
+      atkScroll.setAttribute('data-symbol', SCROLL_SYMBOLS[result.attacker] || '?');
+      defScroll.setAttribute('data-symbol', SCROLL_SYMBOLS[result.defender] || '?');
+      atkContainer.classList.add('scroll-show');
+      defContainer.classList.add('scroll-show');
+    }, 1000);
+
+    // Phase 4: Result (1.6-2.2s)
+    setTimeout(() => {
+      if (result.action === 'capture_flag') {
+        textEl.textContent = `${LABELS[result.attacker]} captures the FLAG!`;
+        textEl.className = 'combat-result win pop';
+        atkContainer.classList.add('winner');
+        defContainer.classList.add('loser');
+      } else if (result.action === 'bomb') {
+        textEl.textContent = `${LABELS[result.attacker]} hits a BOMB! Both destroyed!`;
+        textEl.className = 'combat-result bomb pop';
+        atkContainer.classList.add('loser');
+        defContainer.classList.add('loser');
+      } else if (result.outcome === 'win') {
+        textEl.textContent = `${LABELS[result.attacker]} beats ${LABELS[result.defender]}!`;
+        textEl.className = 'combat-result win pop';
+        atkContainer.classList.add('winner');
+        defContainer.classList.add('loser');
+      } else if (result.outcome === 'lose') {
+        textEl.textContent = `${LABELS[result.attacker]} loses to ${LABELS[result.defender]}!`;
+        textEl.className = 'combat-result lose pop';
+        atkContainer.classList.add('loser');
+        defContainer.classList.add('winner');
+      } else {
+        textEl.textContent = `${LABELS[result.attacker]} vs ${LABELS[result.defender]} \u2014 DRAW!`;
+        textEl.className = 'combat-result draw pop';
+        atkContainer.classList.add('draw-result');
+        defContainer.classList.add('draw-result');
+      }
+    }, 1600);
+
+    // Phase 5: OK button (2.2s+)
+    setTimeout(() => {
+      okBtn.style.display = '';
+      okBtn.classList.add('pop');
+    }, 2200);
+
+    okBtn.onclick = () => {
       overlay.classList.remove('active');
+      atkContainer.className = 'combat-char';
+      defContainer.className = 'combat-char';
+      atkContainer.style.opacity = '';
+      defContainer.style.opacity = '';
+      textEl.className = 'combat-result';
+      okBtn.className = 'btn';
       resolve();
     };
   });
