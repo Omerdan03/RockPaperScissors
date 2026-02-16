@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request, send_from_directory
 
 from ai import pick_ai_move
 from models import GameRoom, generate_token
+from nn_ai import pick_nn_move
 from room_manager import games, generate_room_code, prune_old_games
 
 api_bp = Blueprint("api", __name__)
@@ -218,7 +219,8 @@ def make_move():
 
     # Computer mode: auto-execute AI move after human's move
     if room.mode == "computer" and room.game.phase == "play" and room.game.current_player == 2:
-        ai_move = pick_ai_move(room.game, 2)
+        use_nn = request.args.get("ai") == "nn"
+        ai_move = pick_nn_move(room.game, 2) if use_nn else pick_ai_move(room.game, 2)
         if ai_move:
             ai_result = room.game.make_move(ai_move["fr"], ai_move["fc"], ai_move["tr"], ai_move["tc"])
             room.bump_version()

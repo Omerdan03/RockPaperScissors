@@ -8,7 +8,8 @@
       "Bash(ls:*)",
       "Bash(/d/git/RockPaperScissors/.venv/Scripts/pip install:*)",
       "Bash(.venv/Scripts/python -m pytest tests/test_local_game.py::TestCombatOverlayStructure::test_arena_html_structure -v --tb=short)",
-      "Bash(python -m pytest:*)"
+      "Bash(python -m pytest:*)",
+      "Bash(pip install:*)"
     ]
   }
 }
