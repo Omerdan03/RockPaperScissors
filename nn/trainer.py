@@ -36,49 +36,63 @@ class PPOTrainer:
         if advantages.numel() > 1:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        # PPO epochs
+        # Mini-batch PPO
         total_metrics = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0, "total_loss": 0.0}
+        n = states.size(0)
+        mbs = min(self.config.mini_batch_size, n)
+        num_updates = 0
 
         for _ in range(self.config.ppo_epochs):
-            logits, values = self.model(states)
-            values = values.squeeze(-1)
+            perm = torch.randperm(n, device=self.device)
+            for start in range(0, n, mbs):
+                idx = perm[start:start + mbs]
 
-            # Mask invalid actions
-            logits[~masks] = float("-inf")
-            log_probs_all = F.log_softmax(logits, dim=1)
-            new_log_probs = log_probs_all.gather(1, actions.unsqueeze(1)).squeeze(1)
+                mb_states = states[idx]
+                mb_masks = masks[idx]
+                mb_actions = actions[idx]
+                mb_old_lp = old_log_probs[idx]
+                mb_adv = advantages[idx]
+                mb_rewards = rewards[idx]
 
-            # Policy loss (clipped surrogate)
-            ratio = torch.exp(new_log_probs - old_log_probs)
-            surr1 = ratio * advantages
-            surr2 = torch.clamp(ratio, 1.0 - self.config.clip_eps, 1.0 + self.config.clip_eps) * advantages
-            policy_loss = -torch.min(surr1, surr2).mean()
+                logits, values = self.model(mb_states)
+                values = values.squeeze(-1)
 
-            # Value loss
-            value_loss = F.mse_loss(values, rewards)
+                # Mask invalid actions
+                logits[~mb_masks] = float("-inf")
+                log_probs_all = F.log_softmax(logits, dim=1)
+                new_log_probs = log_probs_all.gather(1, mb_actions.unsqueeze(1)).squeeze(1)
 
-            # Entropy (over valid actions only)
-            probs = F.softmax(logits, dim=1)
-            # 0 * -inf = nan for masked entries, replace before summing
-            log_probs_safe = torch.where(masks, log_probs_all, torch.zeros_like(log_probs_all))
-            probs_safe = torch.where(masks, probs, torch.zeros_like(probs))
-            entropy = -(probs_safe * log_probs_safe).sum(dim=1).mean()
+                # Policy loss (clipped surrogate)
+                ratio = torch.exp(new_log_probs - mb_old_lp)
+                surr1 = ratio * mb_adv
+                surr2 = torch.clamp(ratio, 1.0 - self.config.clip_eps, 1.0 + self.config.clip_eps) * mb_adv
+                policy_loss = -torch.min(surr1, surr2).mean()
 
-            loss = policy_loss + self.config.value_coeff * value_loss - self.config.entropy_coeff * entropy
+                # Value loss
+                value_loss = F.mse_loss(values, mb_rewards)
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
-            self.optimizer.step()
+                # Entropy (over valid actions only)
+                probs = F.softmax(logits, dim=1)
+                log_probs_safe = torch.where(mb_masks, log_probs_all, torch.zeros_like(log_probs_all))
+                probs_safe = torch.where(mb_masks, probs, torch.zeros_like(probs))
+                entropy = -(probs_safe * log_probs_safe).sum(dim=1).mean()
 
-            total_metrics["policy_loss"] += policy_loss.item()
-            total_metrics["value_loss"] += value_loss.item()
-            total_metrics["entropy"] += entropy.item()
-            total_metrics["total_loss"] += loss.item()
+                loss = policy_loss + self.config.value_coeff * value_loss - self.config.entropy_coeff * entropy
 
-        # Average over epochs
+                self.optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
+                self.optimizer.step()
+
+                total_metrics["policy_loss"] += policy_loss.item()
+                total_metrics["value_loss"] += value_loss.item()
+                total_metrics["entropy"] += entropy.item()
+                total_metrics["total_loss"] += loss.item()
+                num_updates += 1
+
+        # Average over all mini-batch updates
         for k in total_metrics:
-            total_metrics[k] /= self.config.ppo_epochs
+            total_metrics[k] /= max(num_updates, 1)
 
         self.scheduler.step()
         return total_metrics

@@ -463,6 +463,16 @@
     animation: result-pop 0.3s ease-out forwards;
   }
 
+  .piece-slide {
+    position: fixed;
+    z-index: 1000;
+    transition: transform 0.25s ease-in-out;
+    pointer-events: none;
+  }
+  .piece-slide .char {
+    animation: none;
+  }
+
   @media (max-width: 600px) {
     :root { --cell-size: 48px; }
     .piece { width: 40px; height: 40px; }
@@ -745,6 +755,8 @@ function renderBoard() {
     for (let c = 0; c < state.size; c++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
 
       if (p1Rows.includes(r)) cell.classList.add('zone-p1');
       else if (p2Rows.includes(r)) cell.classList.add('zone-p2');
@@ -905,6 +917,47 @@ async function handleSetupClick(r, c) {
   renderBoard();
 }
 
+// ===== Move animation =====
+function animateMove(fr, fc, tr, tc) {
+  return new Promise(resolve => {
+    const sourceCell = document.querySelector(`.cell[data-r="${fr}"][data-c="${fc}"]`);
+    const targetCell = document.querySelector(`.cell[data-r="${tr}"][data-c="${tc}"]`);
+    if (!sourceCell || !targetCell) { resolve(); return; }
+    const piece = sourceCell.querySelector('.piece');
+    if (!piece) { resolve(); return; }
+
+    const srcRect = piece.getBoundingClientRect();
+    const tgtRect = targetCell.getBoundingClientRect();
+
+    const clone = piece.cloneNode(true);
+    clone.classList.add('piece-slide');
+    clone.style.left = srcRect.left + 'px';
+    clone.style.top = srcRect.top + 'px';
+    clone.style.width = srcRect.width + 'px';
+    clone.style.height = srcRect.height + 'px';
+    document.body.appendChild(clone);
+
+    piece.style.visibility = 'hidden';
+
+    const dx = tgtRect.left + (tgtRect.width - srcRect.width) / 2 - srcRect.left;
+    const dy = tgtRect.top + (tgtRect.height - srcRect.height) / 2 - srcRect.top;
+
+    // Force reflow so browser registers initial position before transition
+    getComputedStyle(clone).transform;
+    clone.style.transform = `translate(${dx}px, ${dy}px)`;
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clone.remove();
+      resolve();
+    };
+    clone.addEventListener('transitionend', finish);
+    setTimeout(finish, 350);
+  });
+}
+
 // ===== Move execution =====
 async function executeMove(fr, fc, tr, tc) {
   const result = await api('/api/move', 'POST', { fr, fc, tr, tc });
@@ -915,6 +968,11 @@ async function executeMove(fr, fc, tr, tc) {
 
   selectedCell = null;
   validMoves = [];
+
+  // Animate simple move before re-rendering
+  if (result.action === 'move') {
+    await animateMove(fr, fc, tr, tc);
+  }
 
   if (result.action === 'combat' || result.action === 'bomb' || result.action === 'capture_flag') {
     await showCombatPopup(result, viewer);

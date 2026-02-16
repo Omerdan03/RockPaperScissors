@@ -457,6 +457,16 @@
     animation: result-pop 0.3s ease-out forwards;
   }
 
+  .piece-slide {
+    position: fixed;
+    z-index: 1000;
+    transition: transform 0.25s ease-in-out;
+    pointer-events: none;
+  }
+  .piece-slide .char {
+    animation: none;
+  }
+
   @media (max-width: 600px) {
     :root { --cell-size: 48px; }
     .piece { width: 40px; height: 40px; }
@@ -872,6 +882,47 @@ async function handleSetupClick(r, c) {
   renderBoard();
 }
 
+// ===== Move animation =====
+function animateMove(fr, fc, tr, tc) {
+  return new Promise(resolve => {
+    const sourceCell = document.querySelector(`.cell[data-r="${fr}"][data-c="${fc}"]`);
+    const targetCell = document.querySelector(`.cell[data-r="${tr}"][data-c="${tc}"]`);
+    if (!sourceCell || !targetCell) { resolve(); return; }
+    const piece = sourceCell.querySelector('.piece');
+    if (!piece) { resolve(); return; }
+
+    const srcRect = piece.getBoundingClientRect();
+    const tgtRect = targetCell.getBoundingClientRect();
+
+    const clone = piece.cloneNode(true);
+    clone.classList.add('piece-slide');
+    clone.style.left = srcRect.left + 'px';
+    clone.style.top = srcRect.top + 'px';
+    clone.style.width = srcRect.width + 'px';
+    clone.style.height = srcRect.height + 'px';
+    document.body.appendChild(clone);
+
+    piece.style.visibility = 'hidden';
+
+    const dx = tgtRect.left + (tgtRect.width - srcRect.width) / 2 - srcRect.left;
+    const dy = tgtRect.top + (tgtRect.height - srcRect.height) / 2 - srcRect.top;
+
+    // Force reflow so browser registers initial position before transition
+    getComputedStyle(clone).transform;
+    clone.style.transform = `translate(${dx}px, ${dy}px)`;
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clone.remove();
+      resolve();
+    };
+    clone.addEventListener('transitionend', finish);
+    setTimeout(finish, 350);
+  });
+}
+
 // ===== Move execution =====
 async function executeMove(fr, fc, tr, tc) {
   const result = await api('/api/move', 'POST', { fr, fc, tr, tc });
@@ -882,6 +933,11 @@ async function executeMove(fr, fc, tr, tc) {
 
   selectedCell = null;
   validMoves = [];
+
+  // Animate human's simple move before re-rendering
+  if (result.action === 'move') {
+    await animateMove(fr, fc, tr, tc);
+  }
 
   // Show human's combat popup if applicable
   if (result.action === 'combat' || result.action === 'bomb' || result.action === 'capture_flag') {
@@ -901,6 +957,20 @@ async function executeMove(fr, fc, tr, tc) {
 
   // AI response
   if (result.ai_move) {
+    const ai = result.ai_move;
+
+    // For simple AI moves, visually offset piece back to source position
+    if (ai.action === 'move') {
+      const srcCell = document.querySelector(`.cell[data-r="${ai.fr}"][data-c="${ai.fc}"]`);
+      const tgtCell = document.querySelector(`.cell[data-r="${ai.tr}"][data-c="${ai.tc}"]`);
+      const aiPiece = tgtCell && tgtCell.querySelector('.piece');
+      if (srcCell && tgtCell && aiPiece) {
+        const srcRect = srcCell.getBoundingClientRect();
+        const tgtRect = tgtCell.getBoundingClientRect();
+        aiPiece.style.transform = `translate(${srcRect.left - tgtRect.left}px, ${srcRect.top - tgtRect.top}px)`;
+      }
+    }
+
     aiThinking = true;
     updateTurnBar();
 
@@ -908,17 +978,28 @@ async function executeMove(fr, fc, tr, tc) {
     const delay = 800 + Math.random() * 400;
     await new Promise(resolve => setTimeout(resolve, delay));
 
-    // Refresh state to show AI's move result
-    await fetchState();
-    renderBoard();
+    // Animate AI piece sliding to target
+    if (ai.action === 'move') {
+      const tgtCell = document.querySelector(`.cell[data-r="${ai.tr}"][data-c="${ai.tc}"]`);
+      const aiPiece = tgtCell && tgtCell.querySelector('.piece');
+      if (aiPiece) {
+        aiPiece.style.transition = 'transform 0.25s ease-in-out';
+        aiPiece.style.transform = '';
+        await new Promise(resolve => {
+          let done = false;
+          const finish = () => { if (done) return; done = true; aiPiece.style.transition = ''; resolve(); };
+          aiPiece.addEventListener('transitionend', finish, { once: true });
+          setTimeout(finish, 350);
+        });
+      }
+    }
 
     // Highlight AI's move cells briefly
-    highlightAiMove(result.ai_move.fr, result.ai_move.fc, result.ai_move.tr, result.ai_move.tc);
+    highlightAiMove(ai.fr, ai.fc, ai.tr, ai.tc);
 
     // Show AI's combat popup if applicable
-    const aiResult = result.ai_move;
-    if (aiResult.action === 'combat' || aiResult.action === 'bomb' || aiResult.action === 'capture_flag') {
-      await showCombatPopup(aiResult, 2);
+    if (ai.action === 'combat' || ai.action === 'bomb' || ai.action === 'capture_flag') {
+      await showCombatPopup(ai, 2);
     }
 
     aiThinking = false;
@@ -927,7 +1008,7 @@ async function executeMove(fr, fc, tr, tc) {
     renderLog();
     updateTurnBar();
 
-    if (aiResult.game_over || state.phase === 'over') {
+    if (ai.game_over || state.phase === 'over') {
       showWin(state.winner);
       return;
     }

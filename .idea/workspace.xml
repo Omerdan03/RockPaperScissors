@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="1c61f600-2d85-4849-ace7-818e1bc17a0d" name="Changes" comment="add vs computer">
-      <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
+    <list default="true" id="1c61f600-2d85-4849-ace7-818e1bc17a0d" name="Changes" comment="add NN ai">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/routes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nn/self_play.py" beforeDir="false" afterPath="$PROJECT_DIR$/nn/self_play.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nn/trainer.py" beforeDir="false" afterPath="$PROJECT_DIR$/nn/trainer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/static/computer.html" beforeDir="false" afterPath="$PROJECT_DIR$/static/computer.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/static/local.html" beforeDir="false" afterPath="$PROJECT_DIR$/static/local.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/static/online.html" beforeDir="false" afterPath="$PROJECT_DIR$/static/online.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -203,7 +205,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1771061116683</updated>
-      <workItem from="1771061117690" duration="15888000" />
+      <workItem from="1771061117690" duration="16895000" />
     </task>
     <task id="LOCAL-00001" summary="working poc">
       <option name="closed" value="true" />
@@ -237,7 +239,23 @@
       <option name="project" value="LOCAL" />
       <updated>1771087323576</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="add NN ai">
+      <option name="closed" value="true" />
+      <created>1771264258225</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1771264258225</updated>
+    </task>
+    <task id="LOCAL-00006" summary="add NN ai">
+      <option name="closed" value="true" />
+      <created>1771264269004</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1771264269004</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -248,7 +266,8 @@
     <MESSAGE value="move the game for two players with host" />
     <MESSAGE value="add e2e tests" />
     <MESSAGE value="add vs computer" />
-    <option name="LAST_COMMIT_MESSAGE" value="add vs computer" />
+    <MESSAGE value="add NN ai" />
+    <option name="LAST_COMMIT_MESSAGE" value="add NN ai" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/RockPaperScissors$train.coverage" NAME="train Coverage Results" MODIFIED="1771093576035" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
@@ -256,7 +275,7 @@
     <SUITE FILE_PATH="coverage/RockPaperScissors$main.coverage" NAME="main Coverage Results" MODIFIED="1771066875838" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/RockPaperScissors$run.coverage" NAME="run Coverage Results" MODIFIED="1771068215468" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/RockPaperScissors$test_local_game.coverage" NAME="test_local_game Coverage Results" MODIFIED="1771068019127" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
-    <SUITE FILE_PATH="coverage/RockPaperScissors$app.coverage" NAME="app Coverage Results" MODIFIED="1771264029351" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/RockPaperScissors$app.coverage" NAME="app Coverage Results" MODIFIED="1771265056010" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>

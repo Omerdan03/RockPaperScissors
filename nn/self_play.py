@@ -108,20 +108,99 @@ def _assign_rewards(transitions: list[Transition], game: Game, gamma: float) -> 
             discount *= gamma
 
 
+def play_vs_heuristic(
+    model: RPSNet,
+    config: Config,
+    temperature: float = 1.0,
+    device: torch.device = torch.device("cpu"),
+) -> list[Transition]:
+    """Run one episode of NN vs heuristic AI. NN plays a random side."""
+    game = Game(config.board_size, "computer")
+    game.auto_setup_player(1)
+    game.auto_setup_player(2)
+    game.phase = "play"
+    game.current_player = 1
+
+    nn_player = random.choice([1, 2])
+    transitions: list[Transition] = []
+
+    for _ in range(config.max_turns):
+        player = game.current_player
+
+        if player != nn_player:
+            # Heuristic move
+            move = pick_ai_move(game, player)
+            if move is None:
+                break
+            result = game.make_move(move["fr"], move["fc"], move["tr"], move["tc"])
+            if "error" in result:
+                break
+            if game.phase == "over":
+                break
+            continue
+
+        # NN move
+        state = encode_state(game, player).to(device)
+        mask = get_valid_action_mask(game, player).to(device)
+
+        if not mask.any():
+            break
+
+        with torch.no_grad():
+            logits, value = model(state.unsqueeze(0))
+        logits = logits.squeeze(0)
+        value = value.item()
+
+        logits[~mask] = float("-inf")
+        probs = F.softmax(logits / max(temperature, 1e-8), dim=0)
+
+        dist = torch.distributions.Categorical(probs)
+        action = dist.sample()
+        log_prob = dist.log_prob(action).item()
+        action_idx = action.item()
+
+        fr, fc, tr, tc = action_to_move(action_idx, player, config.board_size)
+        result = game.make_move(fr, fc, tr, tc)
+
+        if "error" in result:
+            break
+
+        transitions.append(Transition(
+            state=state.cpu(),
+            action_mask=mask.cpu(),
+            action=action_idx,
+            log_prob=log_prob,
+            value=value,
+            reward=0.0,
+            player=player,
+        ))
+
+        if game.phase == "over":
+            break
+
+    # Assign rewards from NN player's perspective
+    _assign_rewards(transitions, game, config.gamma)
+    return transitions
+
+
 def collect_episodes(
     model: RPSNet,
     config: Config,
     temperature: float,
     device: torch.device = torch.device("cpu"),
 ) -> list[Transition]:
-    """Collect transitions from multiple self-play episodes."""
-    import sys
-
+    """Collect transitions from a mix of self-play and vs-heuristic episodes."""
     all_transitions: list[Transition] = []
     n = config.episodes_per_iter
+    n_heuristic = int(n * config.heuristic_ratio)
+    n_selfplay = n - n_heuristic
+
     for i in range(n):
-        episode = play_episode(model, config, temperature, device)
+        if i < n_heuristic:
+            episode = play_vs_heuristic(model, config, temperature, device)
+        else:
+            episode = play_episode(model, config, temperature, device)
         all_transitions.extend(episode)
         if (i + 1) % max(n // 4, 1) == 0:
-            print(f"  self-play {i + 1}/{n} episodes done", flush=True)
+            print(f"  episodes {i + 1}/{n} done (h={min(i+1, n_heuristic)}/{n_heuristic})", flush=True)
     return all_transitions
